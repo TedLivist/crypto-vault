@@ -21,6 +21,7 @@ contract Vault {
   uint256 public requiredConfirmations;
 
   Transaction[] public transactions;
+  uint public getTransactionsCount;
   
   constructor(address[] memory _owners, uint256 _requiredConfirmations) {
     require(_owners.length > 0, "Owners are required");
@@ -39,8 +40,24 @@ contract Vault {
   }
 
   modifier onlyOwner() {
-    require(isOwner[msg.sender] == true);
+    require(isOwner[msg.sender] == true, "Only owners can perform this function");
     _;
   }
- 
+
+  function createTransaction(address _to, uint _txValue, bytes calldata _data) public onlyOwner returns(uint) {
+    transactions.push();
+    uint txIndex = transactions.length - 1;
+    
+    Transaction storage transaction = transactions[txIndex];
+    transaction.to = _to;
+    transaction.txValue = _txValue;
+    transaction.executed = false;
+    transaction.data = _data;
+    transaction.ownerConfirmed[msg.sender] = true;
+    transaction.confirmations++;
+
+    getTransactionsCount++;
+
+    return txIndex;
+  }
 }
