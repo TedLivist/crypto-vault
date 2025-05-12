@@ -1,5 +1,6 @@
 const { loadFixture }  = require("@nomicfoundation/hardhat-network-helpers")
 const { assert, expect } = require("chai");
+const { getBytes, toBeHex } = require("ethers");
 const { ethers } = require("hardhat");
 
 describe('Vault', () => {
@@ -19,7 +20,7 @@ describe('Vault', () => {
       firstUserAddress, secondUserAddress,
       thirdUserAddress, fourthUserAddress,
     
-      deployer, fourthUser
+      deployer, secondUser, fourthUser
     }
   }
 
@@ -63,5 +64,33 @@ describe('Vault', () => {
     } catch (error) {
       expect(error.message).to.include("Only owners can perform this function");
     }
+  })
+
+  describe("Existing transactions", function() {
+    let vault, deployer, fourthUserAddress, fourthUser, secondUser;
+    
+    
+    beforeEach(async function() {
+      let fixture = await loadFixture(deployContractAndVariables);
+      
+      vault = fixture.vault;
+      deployer = fixture.deployer;
+      fourthUser = fixture.fourthUser;
+      fourthUserAddress = fixture.fourthUserAddress;
+      secondUser = fixture.secondUser;
+      
+      const transferAmount = ethers.parseEther("0.5");
+      const createTx = await vault.connect(deployer).createTransaction(fourthUserAddress, transferAmount, "0x");
+      await createTx.wait();
+    });
+
+    it("confirms the transaction", async function() {
+      const txID = Number(await vault.getTransactionsCount()) - 1
+      const confirmTx = await vault.connect(secondUser).confirmTransaction(txID);
+      await confirmTx.wait();
+      
+      const tx = await vault.transactions(txID);
+      expect(Number(await tx.confirmations)).to.equal(2);
+    })
   })
 })

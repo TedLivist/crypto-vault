@@ -60,4 +60,15 @@ contract Vault {
 
     return txIndex;
   }
+
+  function confirmTransaction(uint txID) public onlyOwner returns(bool) {
+    Transaction storage transaction = transactions[txID];
+    
+    if(transaction.ownerConfirmed[msg.sender] == false) {
+      transaction.ownerConfirmed[msg.sender] = true;
+      transaction.confirmations++;
+    }
+
+    return true;
+  }
 }
