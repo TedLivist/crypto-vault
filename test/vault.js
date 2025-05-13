@@ -1,6 +1,5 @@
 const { loadFixture }  = require("@nomicfoundation/hardhat-network-helpers")
 const { assert, expect } = require("chai");
-const { getBytes, toBeHex } = require("ethers");
 const { ethers } = require("hardhat");
 
 describe('Vault', () => {
@@ -20,7 +19,7 @@ describe('Vault', () => {
       firstUserAddress, secondUserAddress,
       thirdUserAddress, fourthUserAddress,
     
-      deployer, secondUser, fourthUser
+      deployer, secondUser, fourthUser, thirdUser
     }
   }
 
@@ -67,7 +66,9 @@ describe('Vault', () => {
   })
 
   describe("Existing transactions", function() {
-    let vault, deployer, fourthUserAddress, fourthUser, secondUser;
+    let vault, deployer, fourthUserAddress,
+        fourthUser, secondUser, txID,
+        thirdUser
     
     
     beforeEach(async function() {
@@ -78,19 +79,44 @@ describe('Vault', () => {
       fourthUser = fixture.fourthUser;
       fourthUserAddress = fixture.fourthUserAddress;
       secondUser = fixture.secondUser;
+      thirdUser = fixture.thirdUser;
       
       const transferAmount = ethers.parseEther("0.5");
       const createTx = await vault.connect(deployer).createTransaction(fourthUserAddress, transferAmount, "0x");
       await createTx.wait();
+
+      txID = Number(await vault.getTransactionsCount()) - 1
     });
 
     it("confirms the transaction", async function() {
-      const txID = Number(await vault.getTransactionsCount()) - 1
       const confirmTx = await vault.connect(secondUser).confirmTransaction(txID);
       await confirmTx.wait();
       
       const tx = await vault.transactions(txID);
       expect(Number(await tx.confirmations)).to.equal(2);
+    })
+
+    it("returns transaction confirmation count", async function() {
+      const tx1 = await vault.connect(secondUser).confirmTransaction(txID);
+      await tx1.wait();
+      
+      const tx2 = await vault.connect(thirdUser).confirmTransaction(txID);
+      await tx2.wait();
+
+      const count = await vault.confirmationsCount(txID);
+      expect(Number(count)).to.equal(3);
+    })
+
+    it("checks if transaction has met the required confirmations", async function() {
+      const tx1 = await vault.connect(secondUser).confirmTransaction(txID);
+      await tx1.wait();
+
+      expect(await vault.checkConfirmation(txID)).to.equal(false);
+
+      const tx2 = await vault.connect(thirdUser).confirmTransaction(txID);
+      await tx2.wait();
+
+      expect(await vault.checkConfirmation(txID)).to.equal(true);
     })
   })
 })

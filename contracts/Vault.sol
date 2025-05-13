@@ -71,4 +71,27 @@ contract Vault {
 
     return true;
   }
+
+  function confirmationsCount(uint txID) public view returns(uint) {
+    Transaction storage transaction = transactions[txID];
+    uint txConfirmationsCount = transaction.confirmations;
+
+    return txConfirmationsCount;
+  }
+
+  function checkConfirmation(uint txID) public view returns(bool) {
+    bool check = confirmationsCount(txID) >= requiredConfirmations;
+
+    return check;
+  }
+
+  function executeTransaction(uint txID) public onlyOwner {
+    require(checkConfirmation(txID) == true, "Only completely confirmed transactions can be executed");
+
+    Transaction storage transaction = transactions[txID];
+    (bool s, ) = address(transaction.to).call{ value: transaction.txValue }(transaction.data);
+    require(s);
+
+    transaction.executed = true;
+  }
 }
