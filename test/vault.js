@@ -14,7 +14,14 @@ describe('Vault', () => {
 
     const Vault = await ethers.getContractFactory('Vault');
     const vault = await Vault.deploy([deployerAddress, firstUserAddress, secondUserAddress, thirdUserAddress], 3)
-  
+ 
+    const tx = await deployer.sendTransaction({
+      to: await vault.getAddress(),
+      value: ethers.parseEther("1.0")
+    });
+    await tx.wait();
+    console.log("Funded wallet with 1 ETH");
+    
     return { vault, deployerAddress,
       firstUserAddress, secondUserAddress,
       thirdUserAddress, fourthUserAddress,
@@ -117,6 +124,18 @@ describe('Vault', () => {
       await tx2.wait();
 
       expect(await vault.checkConfirmation(txID)).to.equal(true);
+    })
+
+    it("executes the transaction", async function() {
+      const tx1 = await vault.connect(secondUser).confirmTransaction(txID);
+      await tx1.wait();
+      const tx2 = await vault.connect(thirdUser).confirmTransaction(txID);
+      await tx2.wait();
+
+      await vault.connect(thirdUser).executeTransaction(txID);
+      const tx = await vault.transactions(txID);
+
+      expect(tx.executed).to.be.equal(true);
     })
   })
 })

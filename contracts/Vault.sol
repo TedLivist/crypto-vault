@@ -45,6 +45,8 @@ contract Vault {
   }
 
   function createTransaction(address _to, uint _txValue, bytes calldata _data) public onlyOwner returns(uint) {
+    require(address(this).balance > _txValue, "Insufficient balance!");
+
     transactions.push();
     uint txIndex = transactions.length - 1;
     
@@ -89,9 +91,13 @@ contract Vault {
     require(checkConfirmation(txID) == true, "Only completely confirmed transactions can be executed");
 
     Transaction storage transaction = transactions[txID];
+    require(address(this).balance > transaction.txValue, "Insufficient balance");
+
     (bool s, ) = address(transaction.to).call{ value: transaction.txValue }(transaction.data);
     require(s);
 
     transaction.executed = true;
   }
+
+  receive() external payable {}
 }
