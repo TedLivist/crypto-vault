@@ -1,4 +1,4 @@
-const { loadFixture }  = require("@nomicfoundation/hardhat-network-helpers")
+const { loadFixture, time }  = require("@nomicfoundation/hardhat-network-helpers")
 const { assert, expect } = require("chai");
 const { ethers } = require("hardhat");
 
@@ -13,14 +13,14 @@ describe('Vault', () => {
     const fourthUserAddress = await fourthUser.getAddress();
 
     const Vault = await ethers.getContractFactory('Vault');
-    const vault = await Vault.deploy([deployerAddress, firstUserAddress, secondUserAddress, thirdUserAddress], 3)
+    const vault = await Vault.deploy([deployerAddress, firstUserAddress, secondUserAddress, thirdUserAddress], 3, 60)
  
     const tx = await deployer.sendTransaction({
       to: await vault.getAddress(),
-      value: ethers.parseEther("1.0")
+      value: ethers.parseEther("1.5")
     });
     await tx.wait();
-    console.log("Funded wallet with 1 ETH");
+    console.log("Funded wallet with 1.5 ETH");
     
     return { vault, deployerAddress,
       firstUserAddress, secondUserAddress,
@@ -92,7 +92,7 @@ describe('Vault', () => {
       const createTx = await vault.connect(deployer).createTransaction(fourthUserAddress, transferAmount, "0x");
       await createTx.wait();
 
-      txID = Number(await vault.getTransactionsCount()) - 1
+      txID = Number(await vault.getTransactionsCount()) - 1;
     });
 
     it("confirms the transaction", async function() {
@@ -126,16 +126,48 @@ describe('Vault', () => {
       expect(await vault.checkConfirmation(txID)).to.equal(true);
     })
 
-    it("executes the transaction", async function() {
-      const tx1 = await vault.connect(secondUser).confirmTransaction(txID);
-      await tx1.wait();
-      const tx2 = await vault.connect(thirdUser).confirmTransaction(txID);
-      await tx2.wait();
+    describe("Executing transactions", async function() {
+      let txID2;
 
-      await vault.connect(thirdUser).executeTransaction(txID);
-      const tx = await vault.transactions(txID);
+      beforeEach(async function() {
+        const transferAmount = ethers.parseEther("0.5");
+        const createTx2 = await vault.connect(deployer).createTransaction(fourthUserAddress, transferAmount, "0x");
+        await createTx2.wait();
 
-      expect(tx.executed).to.be.equal(true);
+        txID2 = Number(await vault.getTransactionsCount()) - 1;
+      });
+
+      it("executes the transaction and sends error for second execution", async function() {
+        const tx1 = await vault.connect(secondUser).confirmTransaction(txID);
+        await tx1.wait();
+        const tx2 = await vault.connect(thirdUser).confirmTransaction(txID);
+        await tx2.wait();
+  
+        await vault.connect(thirdUser).executeTransaction(txID);
+        const tx = await vault.transactions(txID);
+  
+        expect(tx.executed).to.be.equal(true);
+
+        // test cooldown delay restraint by calling execution immediately
+        const tx3 = await vault.connect(secondUser).confirmTransaction(txID2);
+        await tx3.wait();
+        const tx4 = await vault.connect(thirdUser).confirmTransaction(txID2);
+        await tx4.wait();
+
+        try {
+          await vault.connect(thirdUser).executeTransaction(txID2);
+          assert.fail("Transaction should have reverted");
+        } catch (error) {
+          expect(error.message).to.include("Cooldown between withdrawals has not elapsed");
+        }
+
+        // fast-forward to be longer than defined delay
+        await time.increase(61);
+        await vault.connect(thirdUser).executeTransaction(txID2);
+        const successTx = await vault.transactions(txID2);
+  
+        expect(successTx.executed).to.be.equal(true);
+      })
     })
   })
 })

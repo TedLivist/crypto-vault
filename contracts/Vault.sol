@@ -22,8 +22,11 @@ contract Vault {
 
   Transaction[] public transactions;
   uint public getTransactionsCount;
+
+  uint withdrawalDelay;
+  uint lastWithdrawal;
   
-  constructor(address[] memory _owners, uint256 _requiredConfirmations) {
+  constructor(address[] memory _owners, uint256 _requiredConfirmations, uint256 _withdrawalDelay) {
     require(_owners.length > 0, "Owners are required");
     for(uint i = 0; i < _owners.length; i++) {
       require(_owners[i] == address(_owners[i]), "Invalid address for owner");
@@ -37,6 +40,7 @@ contract Vault {
             _requiredConfirmations <= _owners.length, "Invalid required confirmations");
     
     requiredConfirmations = _requiredConfirmations;
+    withdrawalDelay = _withdrawalDelay;
   }
 
   modifier onlyOwner() {
@@ -83,12 +87,13 @@ contract Vault {
 
   function checkConfirmation(uint txID) public view returns(bool) {
     bool check = confirmationsCount(txID) >= requiredConfirmations;
-
+    
     return check;
   }
 
   function executeTransaction(uint txID) public onlyOwner {
     require(checkConfirmation(txID) == true, "Only completely confirmed transactions can be executed");
+    require(block.timestamp >= (lastWithdrawal + withdrawalDelay), "Cooldown between withdrawals has not elapsed");
 
     Transaction storage transaction = transactions[txID];
     require(address(this).balance > transaction.txValue, "Insufficient balance");
@@ -97,6 +102,7 @@ contract Vault {
     require(s);
 
     transaction.executed = true;
+    lastWithdrawal = block.timestamp;
   }
 
   receive() external payable {}
