@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
-
-import "hardhat/console.sol";
+pragma solidity ^0.8.28;
 
 // this is a multisig vault contract
 contract Vault {
@@ -27,6 +25,10 @@ contract Vault {
   uint public lastWithdrawal = block.timestamp;
 
   bool private locked;
+
+  event TransactionCreated(address indexed sender, uint256 txIndex);
+  event TransactionConfirmed(address indexed sender);
+  event TransactionExecuted(address indexed sender, address indexed to, uint256 value);
   
   constructor(address[] memory _owners, uint256 _requiredConfirmations, uint256 _withdrawalDelay) {
     require(_owners.length > 0, "Owners are required");
@@ -73,6 +75,8 @@ contract Vault {
 
     getTransactionsCount++;
 
+    emit TransactionCreated(msg.sender, txIndex);
+
     return txIndex;
   }
 
@@ -84,6 +88,8 @@ contract Vault {
       transaction.ownerConfirmed[msg.sender] = true;
       transaction.confirmations++;
     }
+
+    emit TransactionConfirmed(msg.sender);
 
     return true;
   }
@@ -114,6 +120,7 @@ contract Vault {
 
     transaction.executed = true;
     lastWithdrawal = block.timestamp;
+    emit TransactionExecuted(msg.sender, transaction.to, transaction.txValue);
     (bool s, ) = address(transaction.to).call{ value: transaction.txValue }(transaction.data);
     require(s, "Transaction execution failed");
   }
