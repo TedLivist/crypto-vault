@@ -23,13 +23,15 @@ contract Vault {
   Transaction[] public transactions;
   uint public getTransactionsCount;
 
-  uint withdrawalDelay;
-  uint lastWithdrawal;
+  uint public withdrawalDelay;
+  uint public lastWithdrawal = block.timestamp;
+
+  bool private locked;
   
   constructor(address[] memory _owners, uint256 _requiredConfirmations, uint256 _withdrawalDelay) {
     require(_owners.length > 0, "Owners are required");
     for(uint i = 0; i < _owners.length; i++) {
-      require(_owners[i] == address(_owners[i]), "Invalid address for owner");
+      require(_owners[i] != address(0), "Invalid address for owner");
       require(!isOwner[_owners[i]], "Duplicate owner");
 
       owners.push(_owners[i]);
@@ -46,6 +48,13 @@ contract Vault {
   modifier onlyOwner() {
     require(isOwner[msg.sender] == true, "Only owners can perform this function");
     _;
+  }
+
+  modifier noReentrancy() {
+    require(!locked, "Reentrancy call!");
+    locked = true;
+    _;
+    locked = false;
   }
 
   function createTransaction(address _to, uint _txValue, bytes calldata _data) public onlyOwner returns(uint) {
@@ -68,6 +77,7 @@ contract Vault {
   }
 
   function confirmTransaction(uint txID) public onlyOwner returns(bool) {
+    require(txID < transactions.length, "Transaction does not exist");
     Transaction storage transaction = transactions[txID];
     
     if(transaction.ownerConfirmed[msg.sender] == false) {
@@ -79,6 +89,7 @@ contract Vault {
   }
 
   function confirmationsCount(uint txID) public view returns(uint) {
+    require(txID < transactions.length, "Transaction does not exist");
     Transaction storage transaction = transactions[txID];
     uint txConfirmationsCount = transaction.confirmations;
 
@@ -86,23 +97,25 @@ contract Vault {
   }
 
   function checkConfirmation(uint txID) public view returns(bool) {
+    require(txID < transactions.length, "Transaction does not exist");
     bool check = confirmationsCount(txID) >= requiredConfirmations;
     
     return check;
   }
 
-  function executeTransaction(uint txID) public onlyOwner {
+  function executeTransaction(uint txID) public onlyOwner noReentrancy {
+    require(txID < transactions.length, "Transaction does not exist");
     require(checkConfirmation(txID) == true, "Only completely confirmed transactions can be executed");
     require(block.timestamp >= (lastWithdrawal + withdrawalDelay), "Cooldown between withdrawals has not elapsed");
 
     Transaction storage transaction = transactions[txID];
     require(address(this).balance > transaction.txValue, "Insufficient balance");
-
-    (bool s, ) = address(transaction.to).call{ value: transaction.txValue }(transaction.data);
-    require(s);
+    require(!transaction.executed, "Transaction has already been executed");
 
     transaction.executed = true;
     lastWithdrawal = block.timestamp;
+    (bool s, ) = address(transaction.to).call{ value: transaction.txValue }(transaction.data);
+    require(s, "Transaction execution failed");
   }
 
   receive() external payable {}

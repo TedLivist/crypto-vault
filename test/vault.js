@@ -17,10 +17,10 @@ describe('Vault', () => {
  
     const tx = await deployer.sendTransaction({
       to: await vault.getAddress(),
-      value: ethers.parseEther("1.5")
+      value: ethers.parseEther("2")
     });
     await tx.wait();
-    console.log("Funded wallet with 1.5 ETH");
+    console.log("Funded wallet with 2 ETH");
     
     return { vault, deployerAddress,
       firstUserAddress, secondUserAddress,
@@ -74,9 +74,7 @@ describe('Vault', () => {
 
   describe("Existing transactions", function() {
     let vault, deployer, fourthUserAddress,
-        fourthUser, secondUser, txID,
-        thirdUser
-    
+        secondUser, txID, thirdUser
     
     beforeEach(async function() {
       let fixture = await loadFixture(deployContractAndVariables);
@@ -143,12 +141,15 @@ describe('Vault', () => {
         const tx2 = await vault.connect(thirdUser).confirmTransaction(txID);
         await tx2.wait();
   
+        await time.increase(61);
         await vault.connect(thirdUser).executeTransaction(txID);
         const tx = await vault.transactions(txID);
   
         expect(tx.executed).to.be.equal(true);
 
-        // test cooldown delay restraint by calling execution immediately
+        // test cooldown delay restraint
+        // by calling execution immediately
+        // - should fail
         const tx3 = await vault.connect(secondUser).confirmTransaction(txID2);
         await tx3.wait();
         const tx4 = await vault.connect(thirdUser).confirmTransaction(txID2);
