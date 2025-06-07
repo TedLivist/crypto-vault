@@ -10,7 +10,7 @@ contract Vault {
     bool executed;
     bytes data;
     uint256 confirmations;
-    mapping(address => bool) ownerConfirmed;
+    uint256 timeExecuted;
   }
 
   address[] public owners;
@@ -20,6 +20,8 @@ contract Vault {
 
   Transaction[] public transactions;
   uint public getTransactionsCount;
+  
+  mapping(uint => mapping(address => bool)) public txConfirmations;
 
   uint public withdrawalDelay;
   uint public lastWithdrawal = block.timestamp;
@@ -59,6 +61,15 @@ contract Vault {
     locked = false;
   }
 
+  function getTransactions() public view returns(Transaction[] memory){
+    return transactions;
+  }
+
+  function getTransaction(uint txID) public view returns(Transaction memory) {
+    require(txID < transactions.length, "Transaction does not exist");
+    return transactions[txID];
+  }
+
   function createTransaction(address _to, uint _txValue, bytes calldata _data) public onlyOwner returns(uint) {
     require(address(this).balance > _txValue, "Insufficient balance!");
 
@@ -70,9 +81,9 @@ contract Vault {
     transaction.txValue = _txValue;
     transaction.executed = false;
     transaction.data = _data;
-    transaction.ownerConfirmed[msg.sender] = true;
     transaction.confirmations++;
 
+    txConfirmations[txIndex][msg.sender] = true;
     getTransactionsCount++;
 
     emit TransactionCreated(msg.sender, txIndex);
@@ -84,8 +95,8 @@ contract Vault {
     require(txID < transactions.length, "Transaction does not exist");
     Transaction storage transaction = transactions[txID];
     
-    if(transaction.ownerConfirmed[msg.sender] == false) {
-      transaction.ownerConfirmed[msg.sender] = true;
+    if(txConfirmations[txID][msg.sender] == false) {
+      txConfirmations[txID][msg.sender] = true;
       transaction.confirmations++;
     }
 
@@ -119,6 +130,7 @@ contract Vault {
     require(!transaction.executed, "Transaction has already been executed");
 
     transaction.executed = true;
+    transaction.timeExecuted = block.timestamp;
     lastWithdrawal = block.timestamp;
     emit TransactionExecuted(msg.sender, transaction.to, transaction.txValue);
     (bool s, ) = address(transaction.to).call{ value: transaction.txValue }(transaction.data);
